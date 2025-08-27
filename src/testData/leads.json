@@ -1,0 +1,146 @@
+[
+    {
+        "id": "conv_12345",  
+        "lead_id": "lead_98765",  
+        "canal": "whatsapp",  
+        "created_at": "2025-08-24T18:00:00Z",  
+        "updated_at": "2025-08-24T18:15:00Z",  
+        "state": {
+            "nombre": "María",
+            "nombre_completo": "María García López",
+            "telefono": "521234567890",
+            "completed": false
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12346",  
+        "lead_id": "lead_98766",  
+        "canal": "whatsapp",  
+        "created_at": "2025-01-15T13:20:00Z",  
+        "updated_at": "2025-01-15T13:35:00Z",  
+        "state": {
+            "nombre": "Carlos",
+            "nombre_completo": "Carlos Hernández Ruiz",
+            "telefono": "522345678901",
+            "completed": true
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_002",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12347",  
+        "lead_id": "lead_98767",  
+        "canal": "whatsapp",  
+        "created_at": "2025-01-15T12:10:00Z",  
+        "updated_at": "2025-01-15T12:25:00Z",  
+        "state": {
+            "nombre": "Ana",
+            "nombre_completo": "Ana Patricia Morales",
+            "telefono": "523456789012",
+            "completed": false
+        },
+        "conversation_mode": "bot",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12348",  
+        "lead_id": "lead_98768",  
+        "canal": "whatsapp",  
+        "created_at": "2025-08-23T18:00:00Z",  
+        "updated_at": "2025-08-23T18:15:00Z",  
+        "state": {
+            "nombre": "Roberto",
+            "nombre_completo": "Roberto Silva Vázquez",
+            "telefono": "524567890123",
+            "completed": false
+        },
+        "conversation_mode": "bot",  
+        "asignado_asesor": "asesor_ventas_003",
+        "status": "paused"  
+    },
+    {
+        "id": "conv_12349",  
+        "lead_id": "lead_98769",  
+        "canal": "whatsapp",  
+        "created_at": "2025-01-15T10:30:00Z",  
+        "updated_at": "2025-01-15T11:15:00Z",  
+        "state": {
+            "nombre": "Laura",
+            "nombre_completo": "Laura Elena Jiménez",
+            "telefono": "525678901234",
+            "completed": true
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_002",
+        "status": "completed"  
+    },
+    {
+        "id": "conv_12350",  
+        "lead_id": "lead_98770",  
+        "canal": "whatsapp",  
+        "created_at": "2025-03-15T10:30:00Z",  
+        "updated_at": "2025-03-15T11:15:00Z",  
+        "state": {
+            "nombre": "Juan",
+            "nombre_completo": "Juan Pérez López",
+            "telefono": "526789012345",
+            "completed": false
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12351",  
+        "lead_id": "lead_98771",  
+        "canal": "whatsapp",  
+        "created_at": "2025-03-15T10:30:00Z",  
+        "updated_at": "2025-03-15T11:15:00Z",  
+        "state": {
+            "nombre": "Arturo",
+            "nombre_completo": "Arturo Pérez López",
+            "telefono": "526789012346",
+            "completed": false
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12352",  
+        "lead_id": "lead_98772",  
+        "canal": "whatsapp",  
+        "created_at": "2025-03-15T10:30:00Z",  
+        "updated_at": "2025-03-15T11:15:00Z",  
+        "state": {
+            "nombre": "Marta",
+            "nombre_completo": "Marta Pérez López",
+            "telefono": "526789012347",
+            "completed": false
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    },
+    {
+        "id": "conv_12353",  
+        "lead_id": "lead_98773",  
+        "canal": "whatsapp",  
+        "created_at": "2025-05-15T10:30:00Z",  
+        "updated_at": "2025-05-15T11:15:00Z",  
+        "state": {
+            "nombre": "Miguel",
+            "nombre_completo": "Miguel Pérez López",
+            "telefono": "526789012348",
+            "completed": false
+        },
+        "conversation_mode": "human",  
+        "asignado_asesor": "asesor_ventas_001",
+        "status": "active"  
+    }
+]
