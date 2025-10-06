@@ -1,4 +1,4 @@
-import messagesData from '../testData/messages.json';
+import { getConversation } from './apiService';
 
 // Cache en memoria para almacenar conversaciones ya cargadas
 // En producción, esto podría ser reemplazado por un sistema de cache más sofisticado
@@ -8,55 +8,60 @@ let conversationsCache = new Map();
 let failedConversationsCache = new Set();
 
 /**
- * IMPORTANTE: Este JSON contiene TODAS las conversaciones para simular el backend.
- * En producción, cada request debería devolver únicamente UNA conversación específica.
- * Este enfoque global es solo para efectos de demostración y testing.
- */
-
-/**
- * Simula una llamada al backend para obtener los mensajes de una conversación específica
+ * Obtiene los mensajes de una conversación específica desde el endpoint real
  * @param {string} conversationId - ID de la conversación
  * @returns {Promise} - Promesa que resuelve con los mensajes de la conversación
  */
 export const getConversationMessages = async (conversationId) => {
   try {
-    console.log(`📡 Simulando request al backend para conversación: ${conversationId}`);
+    console.log(`📡 Obteniendo mensajes para conversación: ${conversationId}`);
     
-    // Simular delay de red (200-800ms)
-    const delay = Math.random() * 600 + 200;
-    await new Promise(resolve => setTimeout(resolve, delay));
+    // Extraer wa_id del conversationId (remover prefijo 'conv_' si existe)
+    const waId = conversationId.replace('conv_', '');
     
-    // NOTA: En producción, esto sería algo como:
-    // const response = await fetch(`/api/conversations/${conversationId}/messages`);
-    // const data = await response.json();
+    // Intentar obtener desde el endpoint real
+    const result = await getConversation(waId);
     
-    // Buscar la conversación en el JSON global (solo para simulación)
-    const conversationData = messagesData.find(
-      conv => conv.conversation_id === conversationId
-    );
-    
-    if (!conversationData) {
-      throw new Error(`Conversación ${conversationId} no encontrada`);
+    if (result.success) {
+      console.log(`✅ Conversación obtenida desde backend: ${conversationId}`);
+      
+      // Formatear mensajes del backend para la UI
+      const formattedMessages = result.data.messages 
+        ? result.data.messages.map(formatBackendMessageForUI)
+        : [];
+      
+      return {
+        success: true,
+        conversationId,
+        messages: formattedMessages,
+        totalMessages: formattedMessages.length,
+        conversationMode: result.data.conversation_mode,
+        name: result.data.lead_info.nombre,
+        phone: result.data.lead_info.telefono,
+        completed: result.data.completed,
+        updated_at: result.data.updated_at
+      };
+    } else {
+      console.warn(`⚠️ Backend falló para ${conversationId}, usando fallback local`);
+      return {
+        success: false,
+        conversationId,
+        messages: [],
+        error: 'Error al obtener conversación',
+        fromCache: true,
+        previouslyFailed: true
+      };
     }
     
-    // Formatear mensajes para la UI
-    const formattedMessages = conversationData.messages.map(formatMessageForUI);
-    
-    console.log(`✅ Mensajes cargados para conversación ${conversationId}:`, formattedMessages.length);
-    
-    return {
-      success: true,
-      conversationId,
-      messages: formattedMessages,
-      totalMessages: formattedMessages.length
-    };
-    
   } catch (error) {
-    console.error(`❌ Error al cargar mensajes para conversación ${conversationId}:`, error);
+    console.error(`❌ Error al obtener conversación ${conversationId}:`, error);
     return {
       success: false,
-      error: error.message,
-      conversationId
+      conversationId,
+      messages: [],
+      error: 'Error al obtener conversación',
+      fromCache: true,
+      previouslyFailed: true
     };
   }
 };
@@ -109,32 +114,15 @@ export const getCachedConversationMessages = async (conversationId, forceRefresh
 };
 
 /**
- * Simula el polling para verificar nuevos mensajes en una conversación activa
- * @param {string} conversationId - ID de la conversación activa
- */
-export const pollConversationUpdates = (conversationId) => {
-  console.log(`🔄 [POLLING] Verificando actualizaciones para conversación: ${conversationId}`);
-  
-  // NOTA: En producción, esto haría una llamada al backend para verificar:
-  // - Nuevos mensajes
-  // - Cambios en el estado de entrega/lectura
-  // - Actualizaciones del estado de la conversación
-  
-  // Por ahora solo mostramos el log para verificar que el polling funciona
-  // En el futuro, aquí se podría hacer:
-  // return fetch(`/api/conversations/${conversationId}/updates?since=${lastUpdateTimestamp}`)
-};
-
-/**
- * Formatea un mensaje del backend para mostrar en la UI
- * @param {Object} message - Mensaje raw del backend
+ * Formatea un mensaje del backend (formato nuevo) para mostrar en la UI
+ * @param {Object} message - Mensaje del endpoint /get-conversation
  * @returns {Object} - Mensaje formateado para la UI
  */
-const formatMessageForUI = (message) => {
+const formatBackendMessageForUI = (message) => {
   const getSenderType = (sender) => {
     if (sender === 'lead') return 'contact';
     if (sender === 'bot') return 'bot';
-    if (sender.startsWith('asesor_')) return 'human_agent';
+    if (sender === 'agente' || sender === 'agent' || sender === 'human_agent') return 'human_agent';
     return 'contact';
   };
 
@@ -156,27 +144,15 @@ const formatMessageForUI = (message) => {
     });
   };
 
-  const formatMessageText = (text, sender) => {
-    // Agregar emoji según el tipo de remitente
-    if (sender === 'bot') {
-      return `🤖 ${text}`;
-    } else if (sender.startsWith('asesor_')) {
-      return `👤 ${text}`;
-    }
-    // Para mensajes del lead (cliente), no agregar emoji
-    return text;
-  };
-
-
-
   return {
-    id: message.id,
-    text: formatMessageText(message.text, message.sender),
+    id: message.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    text: message.text,
     sender: getSenderType(message.sender),
     messageDate: formatMessageDate(message.timestamp),
     timestamp: formatTimestamp(message.timestamp),
     originalTimestamp: message.timestamp,
-    originalSender: message.sender // Mantener sender original para referencia
+    originalSender: message.sender, // Mantener sender original para referencia
+    multimedia: message.multimedia || null // Incluir información multimedia
   };
 };
 

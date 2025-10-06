@@ -6,21 +6,30 @@ import ChatPanel from './ChatPanel';
 
 const ChatApp = () => {
   const { isAuthenticated } = useAuth();
-  const { clearAllMessages } = useMessages();
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const { clearAllMessages, loadRecentContacts, selectedConversation, selectConversation, markUserActivity } = useMessages();
   const [showMobileChat, setShowMobileChat] = useState(false);
+
+  // Cargar contactos cuando el usuario está autenticado
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadRecentContacts();
+    }
+  // eslint-disable-next-line
+  }, [isAuthenticated]); // Remover loadRecentContacts de las dependencias
 
   // Limpiar mensajes si el usuario se desautentica
   useEffect(() => {
     if (!isAuthenticated) {
       clearAllMessages();
-      setSelectedConversation(null);
+      selectConversation(null);
       setShowMobileChat(false);
     }
-  }, [isAuthenticated, clearAllMessages]);
+  }, [isAuthenticated, clearAllMessages, selectConversation]);
 
   const handleSelectConversation = (conversation) => {
-    setSelectedConversation(conversation);
+    selectConversation(conversation);
+    // Marcar actividad del usuario para reiniciar timeout
+    markUserActivity();
     // En móvil, cambiar a la vista de chat cuando se selecciona una conversación
     setShowMobileChat(true);
   };

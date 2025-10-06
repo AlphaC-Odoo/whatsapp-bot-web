@@ -33,7 +33,16 @@ jobs:
     - name: Build
       run: npm run build
       env:
-        REACT_APP_LOGIN_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/login?code=${{ secrets.AZURE_FUNCTION_KEY }}
+        REACT_APP_LOGIN_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/login?code=${{ secrets.LOGIN_FUNCTION_KEY }}
+        REACT_APP_CONVERSATION_MODE_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/conversation-mode?code=${{ secrets.CONVERSATION_MODE_FUNCTION_KEY }}
+        REACT_APP_GET_CONVERSATION_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/get-conversation?code=${{ secrets.GET_CONVERSATION_FUNCTION_KEY }}
+        REACT_APP_GET_RECENT_MESSAGES_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/get-recent-messages?code=${{ secrets.GET_RECENT_MESSAGES_FUNCTION_KEY }}
+        REACT_APP_GET_RECENT_LEADS_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/leads/recent?code=${{ secrets.GET_RECENT_LEADS_FUNCTION_KEY }}
+        REACT_APP_SEND_AGENT_MESSAGE_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/send-agent-message?code=${{ secrets.SEND_AGENT_MESSAGE_FUNCTION_KEY }}
+        REACT_APP_NEXT_CONVERSATIONS_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/next-conversations?code=${{ secrets.NEXT_CONVERSATIONS_FUNCTION_KEY }}
+        REACT_APP_GET_MULTIMEDIA_ENDPOINT: https://webappiwhatsapp-d8deg9ath9gufygp.westus-01.azurewebsites.net/api/get-multimedia-whatsapp?code=${{ secrets.GET_MULTIMEDIA_FUNCTION_KEY }}
+        REACT_APP_WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+        REACT_APP_PHONE_NUMBER_ID: ${{ secrets.PHONE_NUMBER_ID }}
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
