@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMessages } from '../contexts/MessagesContext';
 import { formatPhoneNumber } from '../utils/phoneFormatter';
-import { sendAgentMessage, uploadImageToFacebook, uploadAudioToFacebook } from '../services/apiService';
+import { sendAgentMessage, uploadImageToFacebook, uploadAudioToFacebook, uploadDocumentToFacebook } from '../services/apiService';
 import AudioPlayer from './AudioPlayer';
 import ImageMessage from './ImageMessage';
 import VideoMessage from './VideoMessage';
 import AudioRecorder from './AudioRecorder';
+import DocumentMessage from './DocumentMessage';
 
 const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
   const [newMessage, setNewMessage] = useState('');
@@ -17,9 +18,14 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [selectedAudioFile, setSelectedAudioFile] = useState(null);
   const [audioPreview, setAudioPreview] = useState(null);
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [showFileUploadPopover, setShowFileUploadPopover] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioFileInputRef = useRef(null);
+  const documentInputRef = useRef(null);
+  const fileUploadPopoverRef = useRef(null);
   const { 
     conversationMessages, 
     loadingMessages, 
@@ -31,9 +37,11 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
   } = useMessages();
 
   // Obtener mensajes de la conversación actual
-  const messages = selectedConversation 
-    ? conversationMessages[selectedConversation.id] || []
-    : [];
+  const messages = useMemo(() => {
+    return selectedConversation 
+      ? conversationMessages[selectedConversation.id] || []
+      : [];
+  }, [selectedConversation, conversationMessages]);
   
   const isLoadingCurrentConversation = selectedConversation 
     ? loadingMessages[selectedConversation.id] || false
@@ -41,6 +49,62 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
 
   // Obtener el modo actual de la conversación
   const currentMode = selectedConversation ? getConversationMode(selectedConversation.id) : 'bot';
+  
+  // Estados para controlar el botón de continuación
+  const [showContinuationButton, setShowContinuationButton] = useState(false);
+  const [continuationButtonBlocked, setContinuationButtonBlocked] = useState(false);
+  const [lastHumanAgentMessageTime, setLastHumanAgentMessageTime] = useState(null);
+
+  // Función para verificar si han pasado 24 horas desde el último mensaje del lead
+  const shouldShowContinuationButton = useCallback(() => {
+    if (!selectedConversation || !messages || messages.length === 0) {
+      return false;
+    }
+    
+    // Buscar el último mensaje del lead (que no sea bot ni human_agent)
+    const leadMessages = messages.filter(message => 
+      message.sender !== 'bot' && message.sender !== 'human_agent'
+    );
+    
+    // Si no hay mensajes del lead, no mostrar el botón
+    if (leadMessages.length === 0) {
+      return false;
+    }
+    
+    // Obtener el último mensaje del lead
+    const lastLeadMessage = leadMessages[leadMessages.length - 1];
+
+    console.log('🔄 ChatPanel: Último mensaje del lead:', lastLeadMessage);
+    
+    // Si tiene messageDate, usar esa fecha; si no, usar el timestamp como hora de hoy
+    let messageDate = new Date(lastLeadMessage.originalTimestamp);
+    
+    const now = new Date();
+    
+    // Calcular la diferencia en horas
+    const hoursDifference = (now - messageDate) / (1000 * 60 * 60);
+  
+
+    console.log('🔄 ChatPanel: Han pasado 24 horas o más desde el último mensaje del lead:', hoursDifference >= 24);
+    
+    // Mostrar el botón si:
+    // 1. Han pasado 24 horas o más desde el último mensaje del lead Y
+    return hoursDifference >= 24;
+  }, [selectedConversation, messages]);
+
+  // Función para verificar si el botón debe estar bloqueado
+  const shouldBlockContinuationButton = useCallback(() => {
+    if (!lastHumanAgentMessageTime) {
+      return false;
+    }
+
+    const now = new Date();
+    const messageTime = new Date(lastHumanAgentMessageTime);
+    const hoursDifference = (now - messageTime) / (1000 * 60 * 60);
+
+    // Bloquear por 1 hora después del último mensaje del agente humano
+    return hoursDifference < 1;
+  }, [lastHumanAgentMessageTime]);
   
   // Cargar mensajes cuando cambia la conversación seleccionada
   useEffect(() => {
@@ -55,7 +119,48 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
   // eslint-disable-next-line
   }, [selectedConversation?.id]); // Remover setActiveConversation de las dependencias
   
-  // Este useEffect ya no es necesario porque la inicialización se hace en setActiveConversation
+  // Verificar si se debe mostrar el botón de continuación cuando cambian los mensajes o la conversación
+  useEffect(() => {
+    if (selectedConversation && !isLoadingCurrentConversation) {
+      const shouldShow = shouldShowContinuationButton();
+      const isBlocked = shouldBlockContinuationButton();
+      
+      setShowContinuationButton(shouldShow);
+      
+      if (shouldShow) {
+        // Si debe mostrar el botón, verificar si está bloqueado
+        setContinuationButtonBlocked(isBlocked);
+        
+        if (isBlocked) {
+          console.log(`🔄 Botón "Solicitar continuación" bloqueado por timeout de 1 hora para conversación ${selectedConversation.id}`);
+        } else {
+          console.log(`🔄 Botón "Solicitar continuación" disponible para conversación ${selectedConversation.id}`);
+        }
+      } else {
+        // No mostrar el botón si no han pasado 24 horas o si el lead respondió
+        setContinuationButtonBlocked(false);
+        console.log(`🔄 Botón "Solicitar continuación" oculto - lead respondió o no han pasado 24 horas para conversación ${selectedConversation.id}`);
+      }
+    } else {
+      setShowContinuationButton(false);
+      setContinuationButtonBlocked(false);
+    }
+  }, [selectedConversation, isLoadingCurrentConversation, shouldShowContinuationButton, shouldBlockContinuationButton]);
+
+  // Detectar cuando se envía un mensaje del agente humano para actualizar el timestamp
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      // Buscar el último mensaje del agente humano
+      const humanAgentMessages = messages.filter(message => message.sender === 'human_agent');
+      
+      if (humanAgentMessages.length > 0) {
+        const lastHumanMessage = humanAgentMessages[humanAgentMessages.length - 1];
+        if (lastHumanMessage.originalTimestamp) {
+          setLastHumanAgentMessageTime(lastHumanMessage.originalTimestamp);
+        }
+      }
+    }
+  }, [messages]);
 
   // Función para hacer scroll automático al final de los mensajes
   const scrollToBottom = () => {
@@ -68,6 +173,23 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
       scrollToBottom();
     }
   }, [messages.length, selectedConversation?.id, isLoadingCurrentConversation]);
+
+  // Cerrar popover cuando se hace clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (fileUploadPopoverRef.current && !fileUploadPopoverRef.current.contains(event.target)) {
+        setShowFileUploadPopover(false);
+      }
+    };
+
+    if (showFileUploadPopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFileUploadPopover]);
 
   // Función para validar archivo de imagen
   const validateImageFile = (file) => {
@@ -112,6 +234,39 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
     
     if (file.size > maxSize) {
       return { valid: false, error: 'El archivo de audio no puede ser mayor a 16MB' };
+    }
+    
+    return { valid: true };
+  };
+
+  // Función para validar archivo de documento
+  const validateDocumentFile = (file) => {
+    const maxSize = 100 * 1024 * 1024; // 100MB (límite de WhatsApp para documentos)
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain',
+      'text/csv',
+      'application/zip',
+      'application/x-rar-compressed',
+      'application/x-7z-compressed'
+    ];
+    
+    // Validar por tipo MIME y extensión
+    const isValidType = allowedTypes.includes(file.type) || 
+                       file.name.toLowerCase().match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|7z)$/);
+    
+    if (!isValidType) {
+      return { valid: false, error: 'Solo se permiten documentos en formatos: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, ZIP, RAR, 7Z' };
+    }
+    
+    if (file.size > maxSize) {
+      return { valid: false, error: 'El documento no puede ser mayor a 100MB' };
     }
     
     return { valid: true };
@@ -174,6 +329,28 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
     }
     if (audioFileInputRef.current) {
       audioFileInputRef.current.value = '';
+    }
+  };
+
+  // Función para manejar selección de documento
+  const handleDocumentSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const validation = validateDocumentFile(file);
+    if (!validation.valid) {
+      alert(validation.error);
+      return;
+    }
+    
+    setSelectedDocument(file);
+  };
+
+  // Función para limpiar documento seleccionado
+  const clearSelectedDocument = () => {
+    setSelectedDocument(null);
+    if (documentInputRef.current) {
+      documentInputRef.current.value = '';
     }
   };
 
@@ -304,6 +481,68 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
     setShowAudioRecorder(false);
   };
 
+  // Función para enviar documento
+  const handleSendDocument = async () => {
+    if (!selectedDocument || currentMode === 'bot' || isUploadingDocument) return;
+    
+    const waId = selectedConversation.id.replace('conv_', '');
+    console.log('🎯 ChatPanel: Enviando documento, ID de la conversación:', waId);
+    setIsUploadingDocument(true);
+    
+    try {
+      console.log('📤 Subiendo documento a Facebook...');
+      
+      const uploadResult = await uploadDocumentToFacebook(selectedDocument);
+
+      if (uploadResult.success) {
+        console.log('✅ Documento subido exitosamente:', uploadResult.data);
+
+        const multimedia = {
+          type: 'document',
+          multimedia_id: uploadResult.data.id
+        };
+
+        const sendResult = await sendAgentMessage(waId, '', multimedia);
+      
+        if (sendResult.success) {
+          console.log('✅ Documento enviado al lead exitosamente:', sendResult.data);
+
+          // Crear mensaje con el documento
+          const newMessage = {
+            id: sendResult.data.message_id_sent,
+            sender: 'human_agent',
+            text: '',
+            timestamp: new Date(sendResult.data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            messageDate: new Date(sendResult.data.timestamp).toLocaleDateString(),
+            delivered: true,
+            read: false,
+            multimedia: multimedia
+          };
+          
+          // Agregar mensaje a la conversación
+          addMessageToConversation(selectedConversation.id, newMessage);
+        } else {
+          console.error('❌ Error al enviar documento:', sendResult.error);
+          alert('Error al enviar el documento: ' + sendResult.error);
+        }
+        
+        // Marcar actividad del usuario
+        markUserActivity();
+        
+        // Limpiar documento seleccionado
+        clearSelectedDocument();
+      } else {
+        console.error('❌ Error al subir documento:', uploadResult.error);
+        alert('Error al subir el documento: ' + uploadResult.error);
+      }
+    } catch (error) {
+      console.error('❌ Error inesperado al subir documento:', error);
+      alert('Error inesperado al subir el documento');
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
   // Función para enviar archivo de audio
   const handleSendAudioFile = async () => {
     if (!selectedAudioFile || currentMode === 'bot' || isUploadingAudio) return;
@@ -414,8 +653,35 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
     }
   };
 
+  // Función para detectar mensajes inválidos (fuera de dominio)
+  const isInvalidMessage = (messageText) => {
+    return messageText && messageText.startsWith('(FD) MENSAJE INVÁLIDO');
+  };
+
+  // Función para extraer el mensaje del lead de un mensaje inválido
+  const extractLeadMessage = (messageText) => {
+    if (!isInvalidMessage(messageText)) {
+      return messageText;
+    }
+    
+    // Buscar el patrón "(FD) Mensaje del lead: " y extraer lo que viene después
+    const leadMessageMatch = messageText.match(/\(FD\) Mensaje del lead:\s*(.+)/);
+    if (leadMessageMatch) {
+      return leadMessageMatch[1].trim();
+    }
+    
+    // Si no se encuentra el patrón específico, devolver el mensaje original
+    return messageText;
+  };
+
   const handleToggleMode = async () => {
     if (!selectedConversation || isLoading) return;
+    
+    // Solo permitir cambiar de bot a humano, no de humano a bot
+    if (currentMode === 'agente') {
+      console.log('🚫 No se puede cambiar de modo humano a bot');
+      return;
+    }
     
     const newMode = currentMode === 'bot' ? 'agente' : 'bot';
     
@@ -439,6 +705,61 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
     }
   };
 
+  // Función para manejar el clic del botón "Solicitar continuación"
+  const handleRequestContinuation = async () => {
+    if (!selectedConversation || isLoading) return;
+    
+    console.log(`🔄 Botón "Solicitar continuación" activado para conversación ${selectedConversation.id}`);
+    
+    const waId = selectedConversation.id.replace('conv_', '');
+    setIsLoading(true);
+    
+    try {
+      console.log('📤 Enviando solicitud de continuación con template...');
+      
+      // Enviar mensaje vacío con template_name
+      const result = await sendAgentMessage(waId, '', null, 'seguimiento_conversacion');
+      
+      if (result.success) {
+        console.log('✅ Solicitud de continuación enviada exitosamente:', result.data);
+        
+        // Crear mensaje con datos reales del backend
+        const newMessage = {
+          id: result.data.message_id_sent,
+          sender: 'human_agent',
+          text: result.data.message,
+          timestamp: new Date(result.data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          messageDate: new Date(result.data.timestamp).toLocaleDateString(),
+          delivered: true,
+          read: true,
+          originalTimestamp: result.data.timestamp
+        };
+        
+        // Agregar mensaje a la conversación
+        addMessageToConversation(selectedConversation.id, newMessage);
+        
+        // Actualizar el timestamp del último mensaje del agente humano
+        setLastHumanAgentMessageTime(result.data.timestamp);
+        
+        // Bloquear el botón por 1 hora
+        setContinuationButtonBlocked(true);
+        
+        // Marcar actividad del usuario para reiniciar timeout
+        markUserActivity();
+        
+        console.log('🔄 Botón bloqueado por 1 hora desde:', result.data.timestamp);
+      } else {
+        console.error('❌ Error al enviar solicitud de continuación:', result.error);
+        alert('Error al enviar la solicitud de continuación: ' + result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error inesperado al enviar solicitud de continuación:', error);
+      alert('Error inesperado al enviar la solicitud de continuación');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!selectedConversation) {
     return (
       <div className="h-full bg-gray-50 flex items-center justify-center">
@@ -456,7 +777,7 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
   }
 
   return (
-    <div className="h-full bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col relative">
       {/* Header */}
       <div className="bg-gray-50 p-4 border-b border-gray-200 flex items-center justify-between">
         <div className="flex items-center space-x-3">
@@ -495,24 +816,30 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
             </div>
           </div>
         ) : messages.length > 0 ? (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.sender === 'bot' || message.sender === 'human_agent' 
-                  ? 'justify-end' 
-                  : 'justify-start'
-              }`}
-            >
+          messages.map((message) => {
+            const isInvalid = isInvalidMessage(message.text);
+            const leadMessage = extractLeadMessage(message.text);
+            
+            return (
               <div
-                className={`max-w-xs lg:max-w-md min-w-[200px] px-4 py-2 rounded-lg ${
-                  message.sender === 'bot'
-                    ? 'bg-blue-500 text-white'
-                    : message.sender === 'human_agent'
-                    ? 'bg-green-500 text-white'
-                    : 'bg-white text-gray-800 border border-gray-200'
+                key={message.id}
+                className={`flex ${
+                  message.sender === 'bot' || message.sender === 'human_agent' 
+                    ? 'justify-end' 
+                    : 'justify-start'
                 }`}
               >
+                <div
+                  className={`max-w-xs lg:max-w-md min-w-[200px] px-4 py-2 rounded-lg ${
+                    message.sender === 'bot'
+                      ? 'bg-blue-500 text-white'
+                      : message.sender === 'human_agent'
+                      ? 'bg-green-500 text-white'
+                      : isInvalid
+                      ? 'bg-red-50 text-gray-800 border border-red-200'
+                      : 'bg-white text-gray-800 border border-gray-200'
+                  }`}
+                >
                 {/* Mostrar reproductor de audio si el mensaje contiene multimedia de audio */}
                 {message.multimedia && message.multimedia.type === 'audio' ? (
                   <div className="space-y-2">
@@ -542,13 +869,27 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
                     caption={message.multimedia.caption}
                     sender={message.sender}
                   />
+                ) : message.multimedia && message.multimedia.type === 'document' ? (
+                  /* Mostrar documento si el mensaje contiene multimedia de documento */
+                  <DocumentMessage
+                    multimediaId={message.multimedia.multimedia_id}
+                    caption={message.multimedia.caption}
+                    sender={message.sender}
+                  />
                 ) : (
                   /* Mostrar texto normal si no hay multimedia */
-                  <p className="text-sm">
-                    {message.sender === 'bot' && '🤖 '}
-                    {message.sender === 'human_agent' && '👤 '}
-                    {message.text}
-                  </p>
+                  <div className="space-y-1">
+                    {isInvalid && (
+                      <p className="text-xs text-red-600 font-medium">
+                        Mensaje fuera de dominio detectado:
+                      </p>
+                    )}
+                    <p className="text-sm">
+                      {message.sender === 'bot' && '🤖 '}
+                      {message.sender === 'human_agent' && '👤 '}
+                      {leadMessage}
+                    </p>
+                  </div>
                 )}
                 
                 <div className="flex items-center justify-between mt-1">
@@ -577,7 +918,8 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         ) : selectedConversation ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
@@ -704,73 +1046,209 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
         </div>
       )}
 
+      {/* Document preview */}
+      {selectedDocument && (
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <div className="w-16 h-16 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h8a2 2 0 012 2v4h-3a2 2 0 00-2 2v3H7a2 2 0 01-2-2V5a2 2 0 012-2zm5 10l4 4m0 0l4-4m-4 4V9" />
+                </svg>
+              </div>
+              <button
+                onClick={clearSelectedDocument}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
+                title="Eliminar documento"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-600">
+                {selectedDocument?.name} ({(selectedDocument?.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+              <p className="text-xs text-gray-500">Listo para enviar</p>
+            </div>
+            <button
+              onClick={handleSendDocument}
+              disabled={currentMode === 'bot' || isUploadingDocument}
+              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            >
+              {isUploadingDocument ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Subiendo...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  <span>Enviar</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Message input */}
       <div className="p-4 border-t border-gray-200 bg-white">
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
+        {showContinuationButton ? (
+          /* Botón de solicitar continuación */
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleRequestContinuation}
+              disabled={continuationButtonBlocked || isLoading}
+              className={`px-6 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors font-medium ${
+                continuationButtonBlocked || isLoading
+                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                  : 'bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-500'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Enviando...</span>
+                  </>
+                ) : continuationButtonBlocked ? (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Solicitud enviada - Esperando respuesta</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Solicitar continuación</span>
+                  </>
+                )}
+              </div>
+            </button>
+          </div>
+        ) : (
+          /* Formulario normal de mensaje */
+          <form onSubmit={handleSendMessage} className="flex space-x-2">
           {/* Botón de cambio de modo */}
           <button
             type="button"
             onClick={handleToggleMode}
-            disabled={isLoading}
+            disabled={isLoading || currentMode === 'agente'}
             className={`flex items-center space-x-1 px-3 py-2 rounded-full font-medium text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
               currentMode === 'agente'
-              ? 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-blue-500'
+              ? 'bg-gray-400 text-white cursor-not-allowed'
               : 'bg-green-500 text-white hover:bg-green-600 focus:ring-green-500'
             } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title={`Cambiar a modo ${currentMode === 'agente' ? 'bot' : 'humano'}`}
+            title={currentMode === 'agente' ? 'Modo humano activo - No se puede cambiar a bot' : 'Cambiar a modo humano'}
           >
             <span className="text-base">
-              {currentMode === 'agente' ? '🤖' : '👤'}
+              {currentMode === 'agente' ? '👤' : '🤖'}
             </span>
             <span className="hidden sm:inline">
-              {currentMode === 'agente' ? 'Bot' : 'Humano'}
+              {currentMode === 'agente' ? 'Humano' : 'Bot'}
             </span>
           </button>
 
-          {/* Botón de subir imagen - solo visible en modo agente */}
+          {/* Botón de subir archivos - solo visible en modo agente */}
           {currentMode === 'agente' && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isUploadingImage}
-              className="bg-purple-500 text-white p-2 rounded-full hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Subir imagen"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </button>
-          )}
+            <div className="relative" ref={fileUploadPopoverRef}>
+              <button
+                type="button"
+                onClick={() => setShowFileUploadPopover(!showFileUploadPopover)}
+                disabled={isLoading || isUploadingImage || isUploadingAudio || isUploadingDocument}
+                className="bg-gray-600 text-white p-2 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Subir archivos"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </button>
 
-          {/* Botón de grabar audio - solo visible en modo agente */}
-          {currentMode === 'agente' && (
-            <button
-              type="button"
-              onClick={() => setShowAudioRecorder(true)}
-              disabled={true}
-              className="bg-gray-400 text-white p-2 rounded-full cursor-not-allowed opacity-50 transition-colors"
-              title="Grabar audio (deshabilitado)"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            </button>
-          )}
+              {/* Popover con opciones de archivo */}
+              {showFileUploadPopover && (
+                <div className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-lg shadow-lg p-2 space-y-1 z-50 min-w-[120px]">
+                  {/* Botón de subir imagen */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setShowFileUploadPopover(false);
+                    }}
+                    disabled={isLoading || isUploadingImage}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Subir imagen"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Imagen</span>
+                  </button>
 
-          {/* Botón de subir archivo de audio - solo visible en modo agente */}
-          {currentMode === 'agente' && (
-            <button
-              type="button"
-              onClick={() => audioFileInputRef.current?.click()}
-              disabled={isLoading || isUploadingAudio}
-              className="bg-blue-500 text-white px-3 py-2 rounded-full hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-              title="Subir archivo de audio"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <span className="text-sm font-medium">Audio</span>
-            </button>
+                  {/* Botón de subir archivo de audio */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      audioFileInputRef.current?.click();
+                      setShowFileUploadPopover(false);
+                    }}
+                    disabled={isLoading || isUploadingAudio}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Subir archivo de audio"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                    <span>Audio</span>
+                  </button>
+
+                  {/* Botón de subir documento */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      documentInputRef.current?.click();
+                      setShowFileUploadPopover(false);
+                    }}
+                    disabled={isLoading || isUploadingDocument}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Subir documento"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h8a2 2 0 012 2v4h-3a2 2 0 00-2 2v3H7a2 2 0 01-2-2V5a2 2 0 012-2zm5 10l4 4m0 0l4-4m-4 4V9" />
+                    </svg>
+                    <span>Documento</span>
+                  </button>
+
+                  {/* Botón de grabar audio */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAudioRecorder(true);
+                      setShowFileUploadPopover(false);
+                    }}
+                    disabled={false}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors"
+                    title="Grabar audio"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    <span>Grabar Audio</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Input de archivo oculto */}
@@ -788,6 +1266,15 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
             type="file"
             accept=".aac,.amr,.mp3,.ogg,audio/ogg; codecs=opus,audio/mp4,audio/mpeg,audio/aac,audio/amr,audio/mp3"
             onChange={handleAudioFileSelect}
+            className="hidden"
+          />
+
+          {/* Input de documento oculto */}
+          <input
+            ref={documentInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,application/zip,application/x-rar-compressed,application/x-7z-compressed"
+            onChange={handleDocumentSelect}
             className="hidden"
           />
           
@@ -813,6 +1300,7 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
             </svg>
           </button>
         </form>
+        )}
       </div>
 
       {/* Audio Recorder Modal */}
