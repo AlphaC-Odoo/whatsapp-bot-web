@@ -5,7 +5,7 @@ import { formatContactForUI } from '../services/contactsService';
 
 const ConversationList = ({ onSelectConversation, selectedConversation }) => {
   const { logout } = useAuth();
-  const { contacts, loadingContacts, loadingMoreContacts, conversationMessages, probablyMoreContacts, loadNextContacts, clearAllMessages, markUserActivity } = useMessages();
+  const { contacts, loadingContacts, loadingMoreContacts, conversationMessages, probablyMoreContacts, loadNextContacts, clearAllMessages, markUserActivity, contactNotifications, selectConversation } = useMessages();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Función para manejar logout completo (limpiar auth + mensajes + polling)
@@ -24,15 +24,32 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
     markUserActivity();
   };
 
+  // Función wrapper para seleccionar conversación que limpia notificaciones
+  const handleSelectConversation = (contact) => {
+    selectConversation(contact);
+    onSelectConversation(contact);
+  };
+
   // Actualizar contactos con los últimos mensajes reales cuando están disponibles y ordenarlos por updated_at
   const contactsWithUpdatedMessages = useMemo(() => {
     const updatedContacts = contacts.map(contact => {
       // Re-formatear el contacto con los mensajes actuales
       const updatedContact = formatContactForUI(contact.originalData, conversationMessages);
+      
+      // Verificar si hay notificación para este contacto
+      const notification = contactNotifications[contact.id];
+      let displayMessage = updatedContact.lastMessage;
+      
+      // Si hay notificación de contacto actualizado, mostrar "Nuevo mensaje"
+      if (notification && notification.type === 'updated_contact') {
+        displayMessage = 'Nuevo mensaje';
+      }
+      
       // Mantener propiedades que no se actualizan
       return {
         ...contact,
-        lastMessage: updatedContact.lastMessage
+        lastMessage: displayMessage,
+        hasNotification: !!notification
       };
     });
     
@@ -53,15 +70,15 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
       // Si ninguno tiene updated_at, mantener orden original
       return 0;
     });
-  }, [contacts, conversationMessages]);
+  }, [contacts, conversationMessages, contactNotifications]);
 
   // Filtrar contactos basado en el término de búsqueda (ya están ordenados por updated_at)
   const filteredContacts = useMemo(() => {
     if (!searchTerm.trim()) return contactsWithUpdatedMessages;
     
     return contactsWithUpdatedMessages.filter(contact =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.phone.includes(searchTerm)
+      (contact.name && contact.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (contact.phone && contact.phone.includes(searchTerm))
     );
   }, [contactsWithUpdatedMessages, searchTerm]);
 
@@ -111,10 +128,10 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
             {filteredContacts.map((contact) => (
               <div
                 key={contact.id}
-                onClick={() => onSelectConversation(contact)}
+                onClick={() => handleSelectConversation(contact)}
                 className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedConversation?.id === contact.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
-                }`}
+                } ${contact.hasNotification ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
               >
                 <div className="flex items-center space-x-3">
                   {/* Avatar */}
@@ -132,10 +149,13 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
                         {contact.timestamp}
                       </span>
                     </div>
-                    <div className="mt-1">
-                      <p className="text-sm text-gray-600 truncate">
+                    <div className="mt-1 flex items-center space-x-2">
+                      <p className={`text-sm truncate ${contact.hasNotification ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
                         {contact.lastMessage}
                       </p>
+                      {contact.hasNotification && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                      )}
                     </div>
                     {/* Indicator de estado */}
                     <div className="flex items-center mt-1 space-x-2">
