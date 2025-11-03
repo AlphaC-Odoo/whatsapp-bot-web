@@ -1,3 +1,49 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Safe viewport utilities to handle mobile browser UI chrome and notches */
+:root {
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+}
+
+html, body {
+  height: 100%;
+}
+
+/* Fallback for iOS Safari older behavior */
+@supports (-webkit-touch-callout: none) {
+  html, body {
+    height: -webkit-fill-available;
+  }
+}
+
+/* Use 100dvh on modern browsers; add safe-area paddings */
+.safe-viewport {
+  height: 100dvh;
+  min-height: 100dvh;
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+}
+
+/* Fallback when 100dvh is unsupported */
+@supports not (height: 100dvh) {
+  .safe-viewport {
+    height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* Sticky helpers that respect safe areas if needed */
+.sticky-safe-top {
+  position: sticky;
+  top: var(--safe-area-top);
+  z-index: 10;
+}
+
+.sticky-safe-bottom {
+  position: sticky;
+  bottom: var(--safe-area-bottom);
+  z-index: 10;
+}

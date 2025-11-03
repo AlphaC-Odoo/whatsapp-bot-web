@@ -322,7 +322,7 @@ export const MessagesProvider = ({ children }) => {
           console.log(`🌐 Mensajes cargados desde backend para: ${conversationId}`);
 
           // Actualizar datos del contacto con información del backend
-          if (result.name || result.phone || result.completed !== undefined) {
+          if (result.name || result.phone || result.completed !== undefined || result.leadInfo) {
 
             setContacts(prev => {
               const updatedContacts = prev.map(contact => {
@@ -331,8 +331,9 @@ export const MessagesProvider = ({ children }) => {
                     {
                       ...contact.originalData,
                       state: {
-                        nombre: result.name,
-                        telefono: result.phone,
+                        ...(result.leadInfo || {}), // Incluir todo el lead_info completo
+                        nombre: result.name || contact.originalData?.state?.nombre,
+                        telefono: result.phone || contact.originalData?.state?.telefono,
                         completed: result.completed,
                       },
                       conversation_mode: result.conversationMode,
@@ -343,8 +344,13 @@ export const MessagesProvider = ({ children }) => {
                       [conversationId]: result.messages
                     }
                   );
-                  setSelectedConversation(updatedConversation);
-                  return updatedConversation;
+                  // Guardar leadInfo completo en selectedConversation
+                  const updatedWithLeadInfo = {
+                    ...updatedConversation,
+                    leadInfo: result.leadInfo || contact.leadInfo
+                  };
+                  setSelectedConversation(updatedWithLeadInfo);
+                  return updatedWithLeadInfo;
                 }
                 return contact;
               });
@@ -507,8 +513,13 @@ export const MessagesProvider = ({ children }) => {
                   [conversationId]: [...(conversationMessages[conversationId] || []), ...newMessages]
                 }
               );
-              setSelectedConversation(updatedContact);
-              return updatedContact;
+              // Guardar leadInfo completo en selectedConversation
+              const updatedWithLeadInfo = {
+                ...updatedContact,
+                leadInfo: result.data.lead_info
+              };
+              setSelectedConversation(updatedWithLeadInfo);
+              return updatedWithLeadInfo;
             }
             return contact;
           });
@@ -672,8 +683,13 @@ export const MessagesProvider = ({ children }) => {
                   [conversationId]: [...(conversationMessages[conversationId] || []), ...newMessages]
                 }
               );
-              setSelectedConversation(updatedContact);
-              return updatedContact;
+              // Guardar leadInfo completo en selectedConversation
+              const updatedWithLeadInfo = {
+                ...updatedContact,
+                leadInfo: result.data.lead_info
+              };
+              setSelectedConversation(updatedWithLeadInfo);
+              return updatedWithLeadInfo;
             }
             return contact;
           });

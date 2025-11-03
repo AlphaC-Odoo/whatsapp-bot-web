@@ -40,7 +40,7 @@ const ChatApp = () => {
   };
 
   return (
-    <div className="h-screen bg-gray-100 flex">
+    <div className="safe-viewport bg-gray-100 flex">
       {/* Left column - Conversations list */}
       <div className={`
         w-full md:w-1/3 md:min-w-[300px] md:max-w-[400px] h-full

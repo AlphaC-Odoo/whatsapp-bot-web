@@ -38,6 +38,7 @@ export const getConversationMessages = async (conversationId) => {
         conversationMode: result.data.conversation_mode,
         name: result.data.lead_info.nombre,
         phone: result.data.lead_info.telefono,
+        leadInfo: result.data.lead_info, // Guardar lead_info completo
         completed: result.data.completed,
         updated_at: result.data.updated_at
       };
