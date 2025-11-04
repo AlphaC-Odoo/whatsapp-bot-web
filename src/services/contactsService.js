@@ -52,6 +52,31 @@ export const formatContactForUI = (lead, conversationMessages = {}) => {
         return `Hace ${diffInDays}d`;
       }
     };
+
+    // Extraer leadInfo de lead.state si está disponible
+    const extractLeadInfo = (state) => {
+      if (!state) return null;
+      
+      // Solo crear leadInfo si hay al menos un campo con valor
+      const hasData = state.nombre || state.telefono || state.tipo_maquinaria || 
+                     state.lugar_requerimiento || state.sitio_web || 
+                     state.uso_empresa_o_venta || state.nombre_empresa || 
+                     state.giro_empresa || state.correo;
+      
+      if (!hasData) return null;
+      
+      return {
+        nombre: state.nombre || null,
+        telefono: state.telefono || null,
+        tipo_maquinaria: state.tipo_maquinaria || null,
+        lugar_requerimiento: state.lugar_requerimiento || null,
+        sitio_web: state.sitio_web || null,
+        uso_empresa_o_venta: state.uso_empresa_o_venta || null,
+        nombre_empresa: state.nombre_empresa || null,
+        giro_empresa: state.giro_empresa || null,
+        correo: state.correo || null
+      };
+    };
   
     return {
       id: lead.id,
@@ -65,6 +90,7 @@ export const formatContactForUI = (lead, conversationMessages = {}) => {
       conversationMode: lead.conversation_mode,
       completed: lead.state.completed,
       assignedAdvisor: lead.asignado_asesor,
+      leadInfo: extractLeadInfo(lead.state), // Extraer leadInfo de state
       originalData: lead // Mantener datos originales para futuras funcionalidades
     };
 };

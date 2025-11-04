@@ -318,6 +318,42 @@ export const MessagesProvider = ({ children }) => {
         
         if (result.fromCache) {
           console.log(`💾 Mensajes cargados desde caché para: ${conversationId}`);
+          
+          // Asegurar que selectedConversation tenga leadInfo incluso cuando viene de caché
+          // Usar setState funcional para acceder al estado actual sin necesidad de dependencias
+          setSelectedConversation(prev => {
+            if (prev?.id === conversationId && !prev.leadInfo) {
+              // Buscar el contacto en la lista para obtener leadInfo
+              const contactInList = contacts.find(c => c.id === conversationId);
+              if (contactInList) {
+                let leadInfo = contactInList.leadInfo;
+                
+                // Si no tiene leadInfo pero tiene originalData.state, extraerlo
+                if (!leadInfo && contactInList.originalData?.state) {
+                  const state = contactInList.originalData.state;
+                  leadInfo = {
+                    nombre: state.nombre || null,
+                    telefono: state.telefono || null,
+                    tipo_maquinaria: state.tipo_maquinaria || null,
+                    lugar_requerimiento: state.lugar_requerimiento || null,
+                    sitio_web: state.sitio_web || null,
+                    uso_empresa_o_venta: state.uso_empresa_o_venta || null,
+                    nombre_empresa: state.nombre_empresa || null,
+                    giro_empresa: state.giro_empresa || null,
+                    correo: state.correo || null
+                  };
+                }
+                
+                if (leadInfo) {
+                  return {
+                    ...prev,
+                    leadInfo: leadInfo
+                  };
+                }
+              }
+            }
+            return prev;
+          });
         } else {
           console.log(`🌐 Mensajes cargados desde backend para: ${conversationId}`);
 
@@ -395,7 +431,7 @@ export const MessagesProvider = ({ children }) => {
       // Quitar indicador de carga
       setLoadingMessages(prev => ({ ...prev, [conversationId]: false }));
     }
-  }, [conversationMessages, sortContactsByUpdatedAt]);
+  }, [conversationMessages, sortContactsByUpdatedAt, contacts]);
 
   /**
    * Formatea un mensaje para mostrar correctamente en la UI
@@ -412,7 +448,45 @@ export const MessagesProvider = ({ children }) => {
   }, []);
 
   const selectConversation = useCallback((conversation) => {
-    setSelectedConversation(conversation);
+    if (!conversation) {
+      setSelectedConversation(null);
+      return;
+    }
+
+    // Asegurar que la conversación tenga leadInfo
+    // Si no lo tiene, intentar obtenerlo del contacto original en contacts
+    let conversationWithLeadInfo = conversation;
+    if (!conversation.leadInfo) {
+      const contactInList = contacts.find(c => c.id === conversation.id);
+      if (contactInList) {
+        // Si el contacto tiene leadInfo en originalData.state, extraerlo
+        if (contactInList.originalData?.state) {
+          const state = contactInList.originalData.state;
+          conversationWithLeadInfo = {
+            ...conversation,
+            leadInfo: {
+              nombre: state.nombre || null,
+              telefono: state.telefono || null,
+              tipo_maquinaria: state.tipo_maquinaria || null,
+              lugar_requerimiento: state.lugar_requerimiento || null,
+              sitio_web: state.sitio_web || null,
+              uso_empresa_o_venta: state.uso_empresa_o_venta || null,
+              nombre_empresa: state.nombre_empresa || null,
+              giro_empresa: state.giro_empresa || null,
+              correo: state.correo || null
+            }
+          };
+        } else if (contactInList.leadInfo) {
+          // Si el contacto ya tiene leadInfo, usarlo
+          conversationWithLeadInfo = {
+            ...conversation,
+            leadInfo: contactInList.leadInfo
+          };
+        }
+      }
+    }
+
+    setSelectedConversation(conversationWithLeadInfo);
     
     // Limpiar notificación cuando se selecciona una conversación
     if (conversation && contactNotifications[conversation.id]) {
@@ -422,7 +496,7 @@ export const MessagesProvider = ({ children }) => {
         return newNotifications;
       });
     }
-  }, [contactNotifications]);
+  }, [contactNotifications, contacts]);
 
   /**
    * Actualiza los mensajes de una conversación con nuevos mensajes con polling
@@ -792,8 +866,15 @@ export const MessagesProvider = ({ children }) => {
           return contact;
         }));
 
-        // Actualizar la conversación seleccionada con el nuevo modo
-        setSelectedConversation(prev => ({ ...prev, conversationMode: mode }));
+        // Actualizar la conversación seleccionada con el nuevo modo, preservando leadInfo
+        setSelectedConversation(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            conversationMode: mode,
+            leadInfo: prev.leadInfo || null // Preservar leadInfo si existe
+          };
+        });
         
         console.log(`✅ Modo cambiado exitosamente a: ${mode}`);
         return { success: true, data: result.data };
@@ -859,8 +940,14 @@ export const MessagesProvider = ({ children }) => {
                 [conversationId]: [...(conversationMessages[conversationId] || []), message]
               }
             );
-            setSelectedConversation(updatedContact);
-            return updatedContact;
+            
+            // Preservar leadInfo al actualizar selectedConversation
+            const updatedWithLeadInfo = {
+              ...updatedContact,
+              leadInfo: contact.leadInfo || updatedContact.leadInfo || null
+            };
+            setSelectedConversation(updatedWithLeadInfo);
+            return updatedWithLeadInfo;
           }
           return contact;
         });
@@ -928,6 +1015,28 @@ export const MessagesProvider = ({ children }) => {
       totalContacts: contacts.length
     };
   };
+
+  // Asegurar que selectedConversation siempre tenga leadInfo cuando esté disponible en contacts
+  useEffect(() => {
+    const conversationId = selectedConversation?.id;
+    const hasLeadInfo = selectedConversation?.leadInfo;
+    
+    if (conversationId && !hasLeadInfo && contacts.length > 0) {
+      const contactInList = contacts.find(c => c.id === conversationId);
+      if (contactInList && contactInList.leadInfo) {
+        setSelectedConversation(prev => {
+          // Solo actualizar si realmente no tiene leadInfo
+          if (!prev?.leadInfo) {
+            return {
+              ...prev,
+              leadInfo: contactInList.leadInfo
+            };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [selectedConversation?.id, selectedConversation?.leadInfo, contacts]);
 
   // Cleanup al desmontar el componente
   useEffect(() => {
