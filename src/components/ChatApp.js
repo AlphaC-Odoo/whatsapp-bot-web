@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useMessages } from '../contexts/MessagesContext';
 import ConversationList from './ConversationList';
 import ChatPanel from './ChatPanel';
+import { requestNotificationPermission } from '../utils/browserNotifications';
 
 const ChatApp = () => {
   const { isAuthenticated } = useAuth();
@@ -16,6 +17,13 @@ const ChatApp = () => {
     }
   // eslint-disable-next-line
   }, [isAuthenticated]); // Remover loadRecentContacts de las dependencias
+
+  // Solicitar permiso de notificaciones del navegador al autenticarse
+  useEffect(() => {
+    if (isAuthenticated) {
+      requestNotificationPermission();
+    }
+  }, [isAuthenticated]);
 
   // Limpiar mensajes si el usuario se desautentica
   useEffect(() => {

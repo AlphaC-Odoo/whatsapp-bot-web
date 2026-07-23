@@ -6,6 +6,7 @@ import {
 } from '../services/messagesService';
 import { changeConversationMode, getRecentMessages, getRecentContacts, getNextContacts } from '../services/apiService';
 import { formatContactForUI } from '../services/contactsService';
+import { showBrowserNotification } from '../utils/browserNotifications';
 
 const MessagesContext = createContext();
 
@@ -45,6 +46,10 @@ export const MessagesProvider = ({ children }) => {
   // Referencias para manejar el polling de contactos
   const contactsPollingIntervalRef = useRef(null);
   const CONTACTS_POLLING_INTERVAL = 60 * 1000; // 1 minuto
+
+  // Ref a la función selectConversation (definida más abajo) para poder
+  // seleccionar la conversación al hacer clic en una notificación del navegador.
+  const selectConversationRef = useRef(null);
   
   // Referencias para manejar el timeout de inactividad de contactos
   const contactsInactivityTimeoutRef = useRef(null);
@@ -128,6 +133,16 @@ export const MessagesProvider = ({ children }) => {
               });
               return newNotifications;
             });
+
+            // Notificación del navegador (solo si la pestaña no está activa)
+            newContactIds.forEach(contact => {
+              showBrowserNotification({
+                title: contact.name || 'Nueva conversación',
+                body: contact.lastMessage || 'Nuevo mensaje',
+                tag: `conv-${contact.id}`,
+                onClick: () => selectConversationRef.current?.(contact),
+              });
+            });
           }
           
           if (updatedContacts.length > 0) {
@@ -142,6 +157,18 @@ export const MessagesProvider = ({ children }) => {
                 };
               });
               return newNotifications;
+            });
+
+            // Notificación del navegador (solo si la pestaña no está activa)
+            updatedContacts.forEach(contactId => {
+              const contact = newContactsMap.get(contactId);
+              if (!contact) return;
+              showBrowserNotification({
+                title: contact.name || 'Nuevo mensaje',
+                body: contact.lastMessage || 'Nuevo mensaje',
+                tag: `conv-${contact.id}`,
+                onClick: () => selectConversationRef.current?.(contact),
+              });
             });
           }
           
@@ -497,6 +524,12 @@ export const MessagesProvider = ({ children }) => {
       });
     }
   }, [contactNotifications, contacts]);
+
+  // Mantener el ref sincronizado con la última versión de selectConversation,
+  // para que el clic en una notificación del navegador abra la conversación.
+  useEffect(() => {
+    selectConversationRef.current = selectConversation;
+  }, [selectConversation]);
 
   /**
    * Actualiza los mensajes de una conversación con nuevos mensajes con polling
