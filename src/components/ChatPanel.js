@@ -690,13 +690,8 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
 
   const handleToggleMode = async () => {
     if (!selectedConversation || isLoading) return;
-    
-    // Solo permitir cambiar de bot a humano, no de humano a bot
-    if (currentMode === 'agente') {
-      console.log('🚫 No se puede cambiar de modo humano a bot');
-      return;
-    }
-    
+
+    // Permitir alternar el modo en ambos sentidos (bot <-> humano)
     const newMode = currentMode === 'bot' ? 'agente' : 'bot';
     
     setIsLoading(true);
@@ -1258,13 +1253,13 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
               <button
                 type="button"
                 onClick={handleToggleMode}
-                disabled={isLoading || currentMode === 'agente'}
+                disabled={isLoading}
                 className={`flex items-center space-x-1 px-3 py-2 rounded-full font-medium text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                   currentMode === 'agente'
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                  ? 'bg-blue-500 text-white hover:bg-blue-600 focus:ring-blue-500'
                   : 'bg-green-500 text-white hover:bg-green-600 focus:ring-green-500'
                 } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={currentMode === 'agente' ? 'Modo humano activo - No se puede cambiar a bot' : 'Cambiar a modo humano'}
+                title={currentMode === 'agente' ? 'Modo humano activo - Cambiar a bot' : 'Modo bot activo - Cambiar a humano'}
               >
                 <span className="text-base">
                   {currentMode === 'agente' ? '👤' : '🤖'}
@@ -1387,21 +1382,19 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      if (currentMode !== 'agente') {
-                        handleToggleMode();
-                      }
+                      handleToggleMode();
                       setShowFileUploadPopover(false);
                     }}
-                    disabled={isLoading || currentMode === 'agente'}
+                    disabled={isLoading}
                     className={`w-full flex items-center space-x-2 px-3 py-2 text-sm rounded-md transition-colors ${
                       currentMode === 'agente'
-                        ? 'text-gray-400 cursor-not-allowed bg-gray-50'
+                        ? 'text-blue-700 hover:bg-blue-50 hover:text-blue-800'
                         : 'text-green-700 hover:bg-green-50 hover:text-green-800'
                     } ${isLoading ? 'opacity-50' : ''}`}
-                    title={currentMode === 'agente' ? 'Modo humano activo - No se puede cambiar a bot' : 'Cambiar a modo humano'}
+                    title={currentMode === 'agente' ? 'Modo humano activo - Cambiar a bot' : 'Cambiar a modo humano'}
                   >
-                    <span className="text-base">{currentMode === 'agente' ? '👤' : '🤖'}</span>
-                    <span>{currentMode === 'agente' ? 'Humano activo' : 'Cambiar a humano'}</span>
+                    <span className="text-base">{currentMode === 'agente' ? '🤖' : '👤'}</span>
+                    <span>{currentMode === 'agente' ? 'Cambiar a bot' : 'Cambiar a humano'}</span>
                   </button>
 
                   <div className="my-1 h-px bg-gray-200" />
