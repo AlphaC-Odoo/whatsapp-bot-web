@@ -90,6 +90,8 @@ export const formatContactForUI = (lead, conversationMessages = {}) => {
       conversationMode: lead.conversation_mode,
       completed: lead.state.completed,
       assignedAdvisor: lead.asignado_asesor,
+      // De dónde llegó el lead (lo calcula la API): 'facebook' | 'web' | 'formulario' | 'whatsapp' | ''
+      origin: lead.origen || '',
       leadInfo: extractLeadInfo(lead.state), // Extraer leadInfo de state
       originalData: lead // Mantener datos originales para futuras funcionalidades
     };

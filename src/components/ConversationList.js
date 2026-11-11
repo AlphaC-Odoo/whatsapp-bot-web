@@ -3,6 +3,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useMessages } from '../contexts/MessagesContext';
 import { formatContactForUI } from '../services/contactsService';
 
+// Marca de origen del lead en la lista: color del avatar y etiqueta.
+// Formulario (el bot escribió primero) en morado; WhatsApp directo (el lead escribió) en verde.
+const ORIGENES = {
+  facebook:   { etiqueta: '📋 Facebook',   titulo: 'Lead de formulario de Facebook',    avatar: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
+  web:        { etiqueta: '📋 Web',        titulo: 'Lead de formulario de la página web', avatar: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
+  formulario: { etiqueta: '📋 Formulario', titulo: 'Lead de formulario',                avatar: 'bg-purple-500', chip: 'bg-purple-100 text-purple-800' },
+  whatsapp:   { etiqueta: '💬 WhatsApp',   titulo: 'El lead escribió directo al WhatsApp', avatar: 'bg-green-500', chip: 'bg-green-100 text-green-800' },
+};
+const ORIGEN_DESCONOCIDO = { etiqueta: null, titulo: '', avatar: 'bg-gray-400', chip: '' };
+
 const ConversationList = ({ onSelectConversation, selectedConversation }) => {
   const { logout } = useAuth();
   const { contacts, loadingContacts, loadingMoreContacts, conversationMessages, probablyMoreContacts, loadNextContacts, clearAllMessages, markUserActivity, contactNotifications, selectConversation } = useMessages();
@@ -99,7 +109,7 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
       </div>
       
       {/* Search bar - Fixed */}
-      <div className="p-4 border-b border-gray-200 flex-shrink-0">
+      <div className="px-3 py-2 border-b border-gray-200 flex-shrink-0">
         <div className="relative">
           <input
             type="text"
@@ -125,52 +135,70 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
           </div>
         ) : filteredContacts.length > 0 ? (
           <>
-            {filteredContacts.map((contact) => (
+            {filteredContacts.map((contact) => {
+              const origen = ORIGENES[contact.origin] || ORIGEN_DESCONOCIDO;
+              return (
               <div
                 key={contact.id}
                 onClick={() => handleSelectConversation(contact)}
-                className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
+                className={`px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
                   selectedConversation?.id === contact.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
                 } ${contact.hasNotification ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
               >
-                <div className="flex items-center space-x-3">
-                  {/* Avatar */}
-                  <div className="w-12 h-12 bg-green-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                <div className="flex items-center space-x-2.5">
+                  {/* Avatar: el color indica el origen del lead */}
+                  <div
+                    className={`w-8 h-8 ${origen.avatar} text-white rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0`}
+                    title={origen.titulo}
+                  >
                     {contact.avatar}
                   </div>
-                  
+
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between space-x-2">
                       <h3 className="text-sm font-semibold text-gray-900 truncate">
                         {contact.name}
                       </h3>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 flex-shrink-0">
                         {contact.timestamp}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center space-x-2">
-                      <p className={`text-sm truncate ${contact.hasNotification ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                    <div className="flex items-center space-x-1.5">
+                      {origen.etiqueta && (
+                        <span
+                          className={`text-[10px] leading-4 px-1.5 rounded font-medium flex-shrink-0 ${origen.chip}`}
+                          title={origen.titulo}
+                        >
+                          {origen.etiqueta}
+                        </span>
+                      )}
+                      {/* Modo y estado de la conversación */}
+                      <span
+                        className="text-xs flex-shrink-0"
+                        title={contact.conversationMode === 'bot' ? 'Contesta el bot' : 'Contesta una persona (modo humano)'}
+                      >
+                        {contact.conversationMode === 'bot' ? '🤖' : '👤'}
+                      </span>
+                      <span
+                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          contact.status === 'active' ? 'bg-green-400' :
+                          contact.status === 'paused' ? 'bg-yellow-400' : 'bg-gray-400'
+                        }`}
+                        title={contact.status === 'completed' ? 'Conversación completa' : 'Conversación en curso'}
+                      ></span>
+                      <p className={`text-xs truncate ${contact.hasNotification ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
                         {contact.lastMessage}
                       </p>
                       {contact.hasNotification && (
                         <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                       )}
                     </div>
-                    {/* Indicator de estado */}
-                    <div className="flex items-center mt-1 space-x-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${
-                        contact.status === 'active' ? 'bg-green-400' : 
-                        contact.status === 'paused' ? 'bg-yellow-400' : 'bg-gray-400'
-                      }`}></span>
-                      <span className="text-xs text-gray-500">
-                        {contact.conversationMode === 'bot' ? '🤖 Bot' : '👤 Humano'}
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             
             {/* Load More Button */}
             {probablyMoreContacts && (
