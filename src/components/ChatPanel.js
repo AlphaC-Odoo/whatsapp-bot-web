@@ -912,7 +912,9 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
       </div>
       
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      {/* key por conversación: al cambiar de chat el contenedor se pinta desde cero
+          y no puede heredar mensajes de la conversación anterior. */}
+      <div key={selectedConversation.id} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {isLoadingCurrentConversation ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -921,13 +923,17 @@ const ChatPanel = ({ selectedConversation, onBackToList, showBackButton }) => {
             </div>
           </div>
         ) : messages.length > 0 ? (
-          messages.map((message) => {
+          messages.map((message, index) => {
             const isInvalid = isInvalidMessage(message.text);
             const leadMessage = extractLeadMessage(message.text);
-            
+
             return (
               <div
-                key={message.id}
+                // Hay conversaciones con ids repetidos (formato viejo msg_<segundo>_0,
+                // mensajes de agente msg_<segundo>_1). Con llaves repetidas React deja
+                // nodos viejos en pantalla, así que se agrega la posición (la lista
+                // solo crece al final).
+                key={`${message.id}-${index}`}
                 className={`flex ${
                   message.sender === 'bot' || message.sender === 'human_agent' 
                     ? 'justify-end' 
