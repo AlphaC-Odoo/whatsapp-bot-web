@@ -4,7 +4,7 @@ import {
   clearConversationsCache,
   getCacheStats 
 } from '../services/messagesService';
-import { changeConversationMode, getRecentMessages, getRecentContacts, getNextContacts } from '../services/apiService';
+import { changeConversationMode, getRecentMessages, getRecentContacts, getNextContacts, markConversationReviewed } from '../services/apiService';
 import { formatContactForUI } from '../services/contactsService';
 import { showBrowserNotification } from '../utils/browserNotifications';
 
@@ -38,6 +38,13 @@ export const MessagesProvider = ({ children }) => {
   
   // Estado para manejar notificaciones de contactos
   const [contactNotifications, setContactNotifications] = useState({});
+
+  // Conversaciones urgentes que debe revisar Mitzi (las calcula la API y llegan
+  // con la lista). Cada una es un contacto formateado con `urgency`.
+  const [urgentes, setUrgentes] = useState([]);
+  // Revisadas en esta sesión: id → fecha ISO. Evita que un polling que salió
+  // antes de guardar la revisión vuelva a pintar en rojo la conversación.
+  const revisadasLocalRef = useRef({});
 
   // Referencias para manejar el polling
   const pollingIntervalRef = useRef(null);
@@ -77,6 +84,30 @@ export const MessagesProvider = ({ children }) => {
       // Si ninguno tiene updated_at, mantener orden original
       return 0;
     });
+  }, []);
+
+  // Guarda las urgentes que mandó la API, sin las que se acaban de revisar aquí.
+  const applyUrgentes = useCallback((lista) => {
+    const formateadas = (lista || [])
+      .map(lead => formatContactForUI(lead, {}))
+      .filter(c => {
+        const revisada = revisadasLocalRef.current[c.id];
+        return !(revisada && c.urgency && revisada >= c.urgency.desde);
+      });
+    setUrgentes(formateadas);
+  }, []);
+
+  // Mitzi abrió (o está viendo) una conversación urgente: deja de estar en rojo.
+  const markReviewed = useCallback((conversation) => {
+    if (!conversation?.id) return;
+    // La lista y ChatApp seleccionan la misma conversación en el mismo clic:
+    // no mandar la revisión dos veces.
+    const anterior = revisadasLocalRef.current[conversation.id];
+    if (anterior && Date.now() - new Date(anterior).getTime() < 5000) return;
+    revisadasLocalRef.current[conversation.id] = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    setUrgentes(prev => prev.filter(c => c.id !== conversation.id));
+    const waId = conversation.leadId || conversation.id.replace(/^conv_/, '');
+    markConversationReviewed(waId);
   }, []);
 
   /**
@@ -188,6 +219,7 @@ export const MessagesProvider = ({ children }) => {
         
         // Actualizar el estado de si hay más contactos
         setProbablyMoreContacts(response.data.has_more);
+        applyUrgentes(response.data.urgentes);
         
       } else if (!response.success && response.error === 'Token expirado') {
         console.log('⏹️ Deteniendo polling de contactos - token expirado');
@@ -200,7 +232,7 @@ export const MessagesProvider = ({ children }) => {
       console.error('❌ Error en polling de contactos:', error);
       // No hacer nada más para evitar que el polling cause problemas
     }
-  }, [conversationMessages]);
+  }, [conversationMessages, applyUrgentes]);
 
   /**
    * Detiene el polling de contactos automáticamente después del timeout de inactividad
@@ -272,6 +304,7 @@ export const MessagesProvider = ({ children }) => {
         setProbablyMoreContacts(response.data.has_more);
         const formattedContacts = response.data.conversations.map(lead => formatContactForUI(lead, conversationMessages));
         setContacts(formattedContacts);
+        applyUrgentes(response.data.urgentes);
         
         // Iniciar polling de contactos después de cargar los contactos iniciales
         startContactsPolling();
@@ -514,6 +547,11 @@ export const MessagesProvider = ({ children }) => {
     }
 
     setSelectedConversation(conversationWithLeadInfo);
+
+    // Abrir una conversación urgente la marca como revisada
+    if (urgentes.some(c => c.id === conversation.id)) {
+      markReviewed(conversationWithLeadInfo);
+    }
     
     // Limpiar notificación cuando se selecciona una conversación
     if (conversation && contactNotifications[conversation.id]) {
@@ -523,7 +561,17 @@ export const MessagesProvider = ({ children }) => {
         return newNotifications;
       });
     }
-  }, [contactNotifications, contacts]);
+  }, [contactNotifications, contacts, urgentes, markReviewed]);
+
+  // Si la conversación abierta vuelve a ser urgente (el lead escribió mientras
+  // Mitzi la veía), ya la está revisando: se marca de nuevo.
+  useEffect(() => {
+    const abierta = selectedConversation?.id;
+    if (abierta && urgentes.some(c => c.id === abierta)) {
+      markReviewed(selectedConversation);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urgentes, selectedConversation?.id, markReviewed]);
 
   // Mantener el ref sincronizado con la última versión de selectConversation,
   // para que el clic en una notificación del navegador abra la conversación.
@@ -1029,6 +1077,8 @@ export const MessagesProvider = ({ children }) => {
     setConversationModes({});
     setContacts([]); // Limpiar contactos también
     setContactNotifications({}); // Limpiar notificaciones
+    setUrgentes([]);
+    revisadasLocalRef.current = {};
     
     // Limpiar caché del servicio
     clearConversationsCache();
@@ -1102,6 +1152,7 @@ export const MessagesProvider = ({ children }) => {
     selectedConversation,
     probablyMoreContacts,
     contactNotifications,
+    urgentes,
     // Acciones
     loadConversationMessages,
     setActiveConversation,

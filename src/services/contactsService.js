@@ -92,6 +92,8 @@ export const formatContactForUI = (lead, conversationMessages = {}) => {
       assignedAdvisor: lead.asignado_asesor,
       // De dónde llegó el lead (lo calcula la API): 'facebook' | 'web' | 'formulario' | 'whatsapp' | ''
       origin: lead.origen || '',
+      // Solo en la lista de urgentes: { tipo, etiqueta, desde } (lo calcula la API)
+      urgency: lead.urgencia || null,
       leadInfo: extractLeadInfo(lead.state), // Extraer leadInfo de state
       originalData: lead // Mantener datos originales para futuras funcionalidades
     };

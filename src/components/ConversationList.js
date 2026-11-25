@@ -15,7 +15,7 @@ const ORIGEN_DESCONOCIDO = { etiqueta: null, titulo: '', avatar: 'bg-gray-400', 
 
 const ConversationList = ({ onSelectConversation, selectedConversation }) => {
   const { logout } = useAuth();
-  const { contacts, loadingContacts, loadingMoreContacts, conversationMessages, probablyMoreContacts, loadNextContacts, clearAllMessages, markUserActivity, contactNotifications, selectConversation } = useMessages();
+  const { contacts, loadingContacts, loadingMoreContacts, conversationMessages, probablyMoreContacts, loadNextContacts, clearAllMessages, markUserActivity, contactNotifications, selectConversation, urgentes } = useMessages();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Función para manejar logout completo (limpiar auth + mensajes + polling)
@@ -82,15 +82,25 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
     });
   }, [contacts, conversationMessages, contactNotifications]);
 
-  // Filtrar contactos basado en el término de búsqueda (ya están ordenados por updated_at)
+  // Las urgentes (las que debe revisar Mitzi) van siempre arriba, la más reciente
+  // primero, aunque no estén entre las conversaciones cargadas; después el resto.
+  const contactsWithUrgentFirst = useMemo(() => {
+    if (!urgentes || urgentes.length === 0) return contactsWithUpdatedMessages;
+    const urgentIds = new Set(urgentes.map(u => u.id));
+    const enLista = new Map(contactsWithUpdatedMessages.map(c => [c.id, c]));
+    const arriba = urgentes.map(u => ({ ...(enLista.get(u.id) || u), urgency: u.urgency }));
+    return [...arriba, ...contactsWithUpdatedMessages.filter(c => !urgentIds.has(c.id))];
+  }, [contactsWithUpdatedMessages, urgentes]);
+
+  // Filtrar contactos basado en el término de búsqueda
   const filteredContacts = useMemo(() => {
-    if (!searchTerm.trim()) return contactsWithUpdatedMessages;
+    if (!searchTerm.trim()) return contactsWithUrgentFirst;
     
-    return contactsWithUpdatedMessages.filter(contact =>
+    return contactsWithUrgentFirst.filter(contact =>
       (contact.name && contact.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (contact.phone && contact.phone.includes(searchTerm))
     );
-  }, [contactsWithUpdatedMessages, searchTerm]);
+  }, [contactsWithUrgentFirst, searchTerm]);
 
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col">
@@ -141,9 +151,14 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
               <div
                 key={contact.id}
                 onClick={() => handleSelectConversation(contact)}
-                className={`px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors ${
-                  selectedConversation?.id === contact.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
-                } ${contact.hasNotification ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
+                className={`px-3 py-2 border-b border-gray-100 cursor-pointer transition-colors ${
+                  contact.urgency
+                    ? 'bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500'
+                    : `hover:bg-gray-50 ${
+                        selectedConversation?.id === contact.id ? 'bg-green-50 border-l-4 border-l-green-500' : ''
+                      } ${contact.hasNotification ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`
+                }`}
+                title={contact.urgency ? `Urgente: ${contact.urgency.etiqueta}` : undefined}
               >
                 <div className="flex items-center space-x-2.5">
                   {/* Avatar: el color indica el origen del lead */}
@@ -165,7 +180,15 @@ const ConversationList = ({ onSelectConversation, selectedConversation }) => {
                       </span>
                     </div>
                     <div className="flex items-center space-x-1.5">
-                      {origen.etiqueta && (
+                      {/* Urgente: la etiqueta roja con el tipo ocupa el lugar de la del origen */}
+                      {contact.urgency ? (
+                        <span
+                          className="text-[10px] leading-4 px-1.5 rounded font-semibold flex-shrink-0 bg-red-600 text-white"
+                          title="Conversación que debe revisar Mitzi"
+                        >
+                          {contact.urgency.etiqueta}
+                        </span>
+                      ) : origen.etiqueta && (
                         <span
                           className={`text-[10px] leading-4 px-1.5 rounded font-medium flex-shrink-0 ${origen.chip}`}
                           title={origen.titulo}

@@ -185,6 +185,37 @@ export const sendAgentMessage = async (waId, message, multimedia = null, templat
   }
 };
 
+// Marca una conversación urgente como revisada (Mitzi la abrió).
+// La ruta es anónima en Functions y la protege el JWT, así que la URL se arma
+// con el dominio de la API de la lista y no necesita una function key propia.
+export const markConversationReviewed = async (waId) => {
+  try {
+    const listEndpoint = process.env.REACT_APP_GET_RECENT_LEADS_ENDPOINT;
+    if (!listEndpoint || !waId) {
+      return { success: false, error: 'Sin endpoint o sin wa_id' };
+    }
+    const endpoint = `${new URL(listEndpoint).origin}/api/marcar-revisada`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ wa_id: waId })
+    });
+
+    const authResponse = await handleAuthResponse(response);
+    if (!authResponse) return { success: false, error: 'Token expirado' };
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return { success: true, data: await response.json() };
+  } catch (error) {
+    console.error('Error al marcar la conversación como revisada:', error);
+    return { success: false, error: error.message || 'Error al marcar como revisada' };
+  }
+};
+
 // Función para cambiar el modo de conversación usando el endpoint real
 export const changeConversationMode = async (waId, mode) => {
   try {

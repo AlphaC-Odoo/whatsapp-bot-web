@@ -3,11 +3,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useMessages } from '../contexts/MessagesContext';
 import ConversationList from './ConversationList';
 import ChatPanel from './ChatPanel';
+import UrgentNotification from './UrgentNotification';
 import { requestNotificationPermission } from '../utils/browserNotifications';
 
 const ChatApp = () => {
   const { isAuthenticated } = useAuth();
-  const { clearAllMessages, loadRecentContacts, selectedConversation, selectConversation, markUserActivity } = useMessages();
+  const { clearAllMessages, loadRecentContacts, selectedConversation, selectConversation, markUserActivity, urgentes } = useMessages();
   const [showMobileChat, setShowMobileChat] = useState(false);
 
   // Cargar contactos cuando el usuario está autenticado
@@ -71,6 +72,12 @@ const ChatApp = () => {
           showBackButton={showMobileChat}
         />
       </div>
+
+      {/* Conversaciones urgentes que debe revisar Mitzi */}
+      <UrgentNotification
+        urgentes={urgentes}
+        onSelectConversation={handleSelectConversation}
+      />
     </div>
   );
 };
